@@ -88,6 +88,7 @@ func (tc *TFJobController) deletePdb(tfJob *tfv1alpha2.TFJob) error {
 	return nil
 }
 
+// TODO: deprecated with CleanPodPolicy.
 func (tc *TFJobController) deletePodsAndServices(tfJob *tfv1alpha2.TFJob, pods []*v1.Pod) error {
 	if len(pods) == 0 {
 		return nil
@@ -102,6 +103,54 @@ func (tc *TFJobController) deletePodsAndServices(tfJob *tfv1alpha2.TFJob, pods [
 
 	for _, pod := range pods {
 		if *tfJob.Spec.CleanPodPolicy == tfv1alpha2.CleanPodPolicyRunning && pod.Status.Phase != v1.PodRunning {
+			continue
+		}
+		if err := tc.podControl.DeletePod(pod.Namespace, pod.Name, tfJob); err != nil {
+			return err
+		}
+		// Pod and service have the same name, thus the service could be deleted using pod's name.
+		if err := tc.serviceControl.DeleteService(pod.Namespace, pod.Name, tfJob); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (tc *TFJobController) doCleanup(tfJob *tfv1alpha2.TFJob) error {
+	// By default, the cleanupPolicyType is RunningPods.
+	cleanupPolicyType := tfv1alpha2.CleanupPolicyTypeRunningPods
+	if tfJob.Spec.CleanupPolicy != nil && tfJob.Spec.CleanupPolicy.CleanupPolicyType != nil {
+		if string(*tfJob.Spec.CleanupPolicy.CleanupPolicyType) != "" {
+			cleanupPolicyType = *tfJob.Spec.CleanupPolicy.CleanupPolicyType
+		}
+
+	}
+	// Delete nothing when the cleanupPolicyType is None.
+	if cleanupPolicyType == tfv1alpha2.CleanupPolicyTypeNone {
+		return nil
+	}
+	// Delete the job directly when the cleanupPolicyType is Job.
+	if cleanupPolicyType == tfv1alpha2.CleanupPolicyTypeJob {
+		if err := tc.tfJobClientSet.KubeflowV1alpha2().TFJobs(tfJob.Namespace).Delete(tfJob.Name, &metav1.DeleteOptions{}); err != nil {
+			log.Warningf("failed to delete TFJob %v under namespace %v: %v", tfJob.Name, tfJob.Namespace, err)
+			return err
+		}
+		return nil
+	}
+	// Delete relevant pods and services when cleanupPolicyType is RunningPods or AllPods
+	pods, err := tc.getPodsForTFJob(tfJob)
+	if err != nil {
+		log.Infof("getPodsForTFJob error %v", err)
+		return err
+	}
+	if len(pods) == 0 {
+		return nil
+	}
+	tc.recorder.Event(tfJob, v1.EventTypeNormal, terminatedTFJobReason,
+		"TFJob is terminated, deleting pods and services")
+
+	for _, pod := range pods {
+		if cleanupPolicyType == tfv1alpha2.CleanupPolicyTypeRunningPods && pod.Status.Phase != v1.PodRunning {
 			continue
 		}
 		if err := tc.podControl.DeletePod(pod.Namespace, pod.Name, tfJob); err != nil {

@@ -46,7 +46,11 @@ type TFJobSpec struct {
 	// CleanPodPolicy defines the policy to kill pods after TFJob is
 	// succeeded.
 	// Default to Running.
+	// TODO: CleanPodPolicy is deprecated. It should be deleted later.
 	CleanPodPolicy *CleanPodPolicy `json:"cleanPodPolicy,omitempty"`
+
+	// CleanupPolicy defines the policy of cleaning up tf-jobs.
+	CleanupPolicy *CleanupPolicy `json:"cleanupPolicy,omitempty"`
 
 	// TFReplicaSpecs is map of TFReplicaType and TFReplicaSpec
 	// specifies the TF replicas to run.
@@ -56,6 +60,16 @@ type TFJobSpec struct {
 	//     "Worker": TFReplicaSpec,
 	//   }
 	TFReplicaSpecs map[TFReplicaType]*TFReplicaSpec `json:"tfReplicaSpecs"`
+}
+
+// CleanPolicy defines the policy type of cleaning up tf-jobs.
+type CleanupPolicy struct {
+	// CleanupPolicyType defines the policy type of cleaning up tf-jobs.
+	// Default to RunningPods.
+	CleanupPolicyType *CleanupPolicyType `json:"cleanupPolicyType,omitempty"`
+	// CleanupDelay defines the delay of executing CleanPolicy.
+	// Default to 0.
+	CleanupDelay *CleanupDelay `json:"cleanupDelay,omitempty"`
 }
 
 // TFReplicaSpec is a description of the TFReplica
@@ -76,6 +90,8 @@ type TFReplicaSpec struct {
 }
 
 // CleanPodPolicy describes how to deal with pods when the TFJob is finished.
+// TODO: CleanPodPolicy is deprecated. It should be deleted later, as well as
+// the following const.
 type CleanPodPolicy string
 
 const (
@@ -84,6 +100,24 @@ const (
 	CleanPodPolicyRunning   CleanPodPolicy = "Running"
 	CleanPodPolicyNone      CleanPodPolicy = "None"
 )
+
+// CleanupPolicyType defines the policy type of cleaning up tf-jobs.
+type CleanupPolicyType string
+
+const (
+	CleanupPolicyTypeUndefined   CleanupPolicyType = ""
+	CleanupPolicyTypeAllPods     CleanupPolicyType = "AllPods"
+	CleanupPolicyTypeRunningPods CleanupPolicyType = "RunningPods"
+	CleanupPolicyTypeJob         CleanupPolicyType = "Job"
+	CleanupPolicyTypeNone        CleanupPolicyType = "None"
+)
+
+// CleanupDelay defines the delay of executing CleanupPolicy using duration string.
+// A duration string is a possibly signed sequence of
+// decimal numbers, each with optional fraction and a unit suffix,
+// such as "300ms", "-1.5h" or "2h45m".
+// Valid time units are "ns", "us" (or "µs"), "ms", "s", "m", "h".
+type CleanupDelay string
 
 // RestartPolicy describes how the TFReplicas should be restarted.
 // Only one of the following restart policies may be specified.
